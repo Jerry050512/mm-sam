@@ -11,6 +11,8 @@ class BaseSAMTrainAgent(TrainAgent):
     """Base class for Sam-based Models."""
     def after_agent_init(self, evaluator_cls: Callable = StreamSegMetrics, **kwargs):
         def build_evaluator_from_dataset(eva_dataset: Union[BaseSAMDataset, Dict[str, BaseSAMDataset]]):
+            if eva_dataset is None:
+                return None
             if isinstance(eva_dataset, Dict):
                 evaluator = {
                     e_key: evaluator_cls(class_names=e_data.semantic_classes)

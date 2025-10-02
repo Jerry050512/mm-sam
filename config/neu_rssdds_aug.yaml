@@ -1,0 +1,14 @@
+train_epoch_num: 50
+train_bs: 4
+test_bs: 1
+train_agent: mm_sam.train_agents.neu_agent.NEUTrainAgent
+agent_kwargs:
+  lr: 0.001
+  x_lora_rank: 4
+  train_transforms:
+    - name: Resize
+      size: [1024, 1024]
+  test_transforms:
+    - name: Resize
+      size: [1024, 1024]
+ckpt_path: /hy-tmp/output/checkpoint.pth

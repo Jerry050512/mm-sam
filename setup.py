@@ -10,8 +10,8 @@ with open(base_requires_path, 'r') as file:
 
 # extra requires
 install_requires += [
-    "torch==2.1.2",
-    "torchvision==0.16.2",
+    "torch==2.3.0",
+    "torchvision==0.18.0",
     "laspy==2.5.3",
     "spectral==0.23.1",
     "huggingface-hub==0.24.6",

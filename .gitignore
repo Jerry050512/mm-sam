@@ -140,7 +140,7 @@ hy-tmp/
 
 # Dataset directories (usually large)
 ../datasets/
-datasets/
+/datasets/
 
 # Experiment logs and checkpoints
 experiments/

@@ -81,7 +81,19 @@ class NEURSSDDSDataset(BaseSAMDataset):
 
     def get_image_by_path(self, image_path: str):
         """Load RGB image from .bmp file."""
-        return read_image_as_rgb_from_disk(image_path)
+        image = read_image_as_rgb_from_disk(image_path)
+        
+        # Ensure image is a contiguous numpy array with correct dtype
+        if not isinstance(image, np.ndarray):
+            image = np.asarray(image, dtype=np.float32)
+        else:
+            image = np.ascontiguousarray(image, dtype=np.float32)
+        
+        # Validate shape
+        if len(image.shape) != 3 or image.shape[2] != 3:
+            raise ValueError(f"RGB image must have shape (H, W, 3), got {image.shape}")
+        
+        return image
 
     def get_depth_by_path(self, depth_path: str):
         """
@@ -98,6 +110,10 @@ class NEURSSDDSDataset(BaseSAMDataset):
             depth_img = Image.open(depth_path)
             depth_array = np.array(depth_img)
             
+            # Ensure it's a numpy array
+            if not isinstance(depth_array, np.ndarray):
+                depth_array = np.asarray(depth_array, dtype=np.float32)
+            
             # Ensure depth is single channel
             if len(depth_array.shape) == 2:
                 depth_array = np.expand_dims(depth_array, axis=2)
@@ -105,18 +121,40 @@ class NEURSSDDSDataset(BaseSAMDataset):
                 # Take first channel if multi-channel
                 depth_array = depth_array[:, :, 0:1]
             
+            # Convert to float32 and normalize
+            depth_array = depth_array.astype(np.float32)
+            
             # Normalize depth values to [0, 1] range
             if depth_array.max() > 1.0:
-                depth_array = depth_array.astype(np.float32) / depth_array.max()
+                depth_array = depth_array / depth_array.max()
             
-            return depth_array.astype(np.float32)
+            # Ensure contiguous array for OpenCV compatibility
+            depth_array = np.ascontiguousarray(depth_array, dtype=np.float32)
+            
+            # Validate shape
+            if len(depth_array.shape) != 3 or depth_array.shape[2] != 1:
+                raise ValueError(f"Depth image must have shape (H, W, 1), got {depth_array.shape}")
+            
+            return depth_array
             
         except Exception as e:
             raise RuntimeError(f"Failed to load depth image from {depth_path}: {e}")
 
     def get_gt_by_path(self, gt_path: str):
         """Load ground truth mask from .png file."""
-        return read_greyscale_mask_from_disk(gt_path, self.label_threshold)
+        mask = read_greyscale_mask_from_disk(gt_path, self.label_threshold)
+        
+        # Ensure mask is a contiguous numpy array with correct dtype
+        if not isinstance(mask, np.ndarray):
+            mask = np.asarray(mask, dtype=np.float32)
+        else:
+            mask = np.ascontiguousarray(mask, dtype=np.float32)
+        
+        # Validate shape (should be 2D)
+        if len(mask.shape) != 2:
+            raise ValueError(f"GT mask must have shape (H, W), got {mask.shape}")
+        
+        return mask
 
     def __getitem__(self, index):
         """Get a single sample from the dataset."""

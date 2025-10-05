@@ -14,6 +14,13 @@ def read_image_as_rgb_from_disk(image_path: str, return_tensor: bool = False) ->
         image = Image.open(image_path).convert('RGB')
         image = np.array(image, dtype=np.float32)
 
+    # Ensure it's a proper numpy array
+    if not isinstance(image, np.ndarray):
+        image = np.asarray(image, dtype=np.float32)
+    
+    # Ensure contiguous array for OpenCV compatibility
+    image = np.ascontiguousarray(image, dtype=np.float32)
+
     # make sure that img ranges from 0. to 255.
     if image.max() <= 1.0:
         image = np.round(image * 255.)
@@ -22,8 +29,11 @@ def read_image_as_rgb_from_disk(image_path: str, return_tensor: bool = False) ->
         image = np.repeat(image[:, :, None], repeats=3, axis=-1)
     elif len(image.shape) == 3 and image.shape[-1] == 1:
         image = np.repeat(image, repeats=3, axis=-1)
-    elif len(image.shape) != 3 and image.shape[-1] != 3:
+    elif len(image.shape) != 3 or image.shape[-1] != 3:
         raise RuntimeError(f'Wrong image shape: {image.shape}. It should be either [H, W] or [H, W, 1] or [H, W, 3]!')
+
+    # Ensure final array is contiguous
+    image = np.ascontiguousarray(image, dtype=np.float32)
 
     if return_tensor:
         image = torch.from_numpy(image)
@@ -39,6 +49,13 @@ def read_greyscale_mask_from_disk(
         gt_mask = Image.open(mask_path).convert('L')
         gt_mask = np.array(gt_mask, dtype=np.float32)
 
+    # Ensure it's a proper numpy array
+    if not isinstance(gt_mask, np.ndarray):
+        gt_mask = np.asarray(gt_mask, dtype=np.float32)
+    
+    # Ensure contiguous array for OpenCV compatibility
+    gt_mask = np.ascontiguousarray(gt_mask, dtype=np.float32)
+
     if len(gt_mask.shape) == 3:
         assert gt_mask.shape[-1] == 1, f"Wrong mask shape: {gt_mask.shape}. Should be (H, W) or (H, W, 1)!"
         gt_mask = gt_mask[:, :, 0]
@@ -52,6 +69,9 @@ def read_greyscale_mask_from_disk(
             gt_mask = gt_mask * 255.
         gt_mask = np.where(gt_mask > label_threshold, 1.0, 0.0)
 
+    # Ensure final array is contiguous
+    gt_mask = np.ascontiguousarray(gt_mask, dtype=np.float32)
+
     if return_tensor:
         gt_mask = torch.from_numpy(gt_mask)
     return gt_mask
@@ -64,6 +84,13 @@ def read_depth_from_disk(
     depth = Image.open(depth_path)
     depth = np.array(depth, dtype=np.float32)
 
+    # Ensure it's a proper numpy array
+    if not isinstance(depth, np.ndarray):
+        depth = np.asarray(depth, dtype=np.float32)
+    
+    # Ensure contiguous array for OpenCV compatibility
+    depth = np.ascontiguousarray(depth, dtype=np.float32)
+
     if scale_factor is not None:
         depth /= scale_factor
     # convert depth from the original scale to the disparity scale
@@ -75,6 +102,10 @@ def read_depth_from_disk(
     # return the false-color RGB depth images (mainly for SAM zero-shot)
     if to_rgb:
         depth = nonrgb_to_rgb(depth)
+    
+    # Ensure final array is contiguous
+    depth = np.ascontiguousarray(depth, dtype=np.float32)
+    
     if return_tensor:
         depth = torch.from_numpy(depth)
     return depth

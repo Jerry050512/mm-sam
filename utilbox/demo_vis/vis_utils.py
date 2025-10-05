@@ -5,6 +5,13 @@ from PIL import Image
 
 
 def nonrgb_to_rgb(nonrgb_image: np.ndarray, log_vis: bool = False, log_num: int = 1):
+    # Ensure it's a proper numpy array
+    if not isinstance(nonrgb_image, np.ndarray):
+        nonrgb_image = np.asarray(nonrgb_image, dtype=np.float32)
+    
+    # Ensure contiguous array for OpenCV compatibility
+    nonrgb_image = np.ascontiguousarray(nonrgb_image, dtype=np.float32)
+    
     if len(nonrgb_image.shape) == 2:
         nonrgb_image = np.repeat(nonrgb_image[:, :, None], repeats=3, axis=-1)
     elif len(nonrgb_image.shape) == 3 and nonrgb_image.shape[-1] == 1:
@@ -19,6 +26,10 @@ def nonrgb_to_rgb(nonrgb_image: np.ndarray, log_vis: bool = False, log_num: int 
         for _ in range(log_num):
             rgb_image = np.log((np.e - 1) * rgb_image + 1)
     rgb_image = np.round(rgb_image * 255.)
+    
+    # Ensure final array is contiguous
+    rgb_image = np.ascontiguousarray(rgb_image, dtype=np.float32)
+    
     return rgb_image
 
 

@@ -178,3 +178,35 @@
     - Create step-by-step training and testing instructions
     - Add troubleshooting guide for common issues
     - _Requirements: 4.1, 4.2, 4.3, 4.4_
+
+- [ ] 10. Fix OpenCV data type error in image transforms
+
+
+
+
+
+
+
+
+
+  - [x] 10.1 Debug and fix cv2.resize data type compatibility issue
+
+
+
+
+    - Investigate the data type mismatch causing OpenCV resize to fail with "src is not a numpy array" error
+    - Ensure all image data (RGB, depth, mask) are properly converted to numpy arrays before transforms
+    - Add explicit data type validation and conversion in dataset loading methods
+    - Verify that image arrays have correct dtype (float32/uint8) and are contiguous in memory
+    - _Requirements: 1.4, 4.6_
+  
+  - [x] 10.2 Add robust data type handling in transform pipeline
+
+
+
+
+    - Add data type checks and conversions in get_image_by_path, get_depth_by_path, and get_gt_by_path methods
+    - Ensure all arrays are contiguous and have compatible dtypes for OpenCV operations
+    - Add error handling for data type conversion failures
+    - Test transforms with various input data formats to ensure compatibility
+    - _Requirements: 1.4, 2.4, 4.6_

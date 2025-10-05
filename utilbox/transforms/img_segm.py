@@ -152,16 +152,39 @@ class Resize(BaseImgSegmTransform):
         self.skip_mask = skip_mask
 
     def resize(self, data_mat: np.ndarray, data_key: str) -> np.ndarray:
+        # Ensure data_mat is a proper numpy array with correct dtype and contiguity
+        if not isinstance(data_mat, np.ndarray):
+            data_mat = np.asarray(data_mat, dtype=np.float32)
+        
+        # Ensure contiguous array for OpenCV compatibility
+        if not data_mat.flags['C_CONTIGUOUS']:
+            data_mat = np.ascontiguousarray(data_mat)
+        
+        # Ensure compatible dtype for OpenCV
+        if data_mat.dtype not in [np.uint8, np.float32, np.float64]:
+            data_mat = data_mat.astype(np.float32)
+        
         if self.resize_func == "cv2":
             unsqueeze_flag = False
             if len(data_mat.shape) == 3 and data_mat.shape[-1] == 1:
                 unsqueeze_flag = True
                 data_mat = data_mat[:, :, 0]
-            data_mat = cv2.resize(
-                data_mat, self.resized_shape,
-                # project mask by the nearest interpolation algorithm
-                interpolation=cv2.INTER_NEAREST_EXACT if 'mask' in data_key else cv2.INTER_LINEAR
-            )
+            
+            # Additional validation before cv2.resize
+            if len(data_mat.shape) < 2 or len(data_mat.shape) > 3:
+                raise ValueError(f"Invalid data shape for cv2.resize: {data_mat.shape}")
+            
+            try:
+                data_mat = cv2.resize(
+                    data_mat, self.resized_shape,
+                    # project mask by the nearest interpolation algorithm
+                    interpolation=cv2.INTER_NEAREST_EXACT if 'mask' in data_key else cv2.INTER_LINEAR
+                )
+            except Exception as e:
+                raise RuntimeError(f"cv2.resize failed for {data_key}: {e}. "
+                                 f"Data type: {type(data_mat)}, shape: {data_mat.shape}, "
+                                 f"dtype: {data_mat.dtype}, contiguous: {data_mat.flags['C_CONTIGUOUS']}")
+            
             if unsqueeze_flag:
                 data_mat = np.expand_dims(data_mat, axis=-1)
         elif self.resize_func == "torch":
@@ -209,8 +232,25 @@ class RandomResizedCrop(RandomCrop):
         else:
             resized_shape = (ori_width, ori_height)
 
+        # Ensure image is compatible with cv2.resize
+        if not isinstance(image, np.ndarray):
+            image = np.asarray(image, dtype=np.float32)
+        if not image.flags['C_CONTIGUOUS']:
+            image = np.ascontiguousarray(image)
+        if image.dtype not in [np.uint8, np.float32, np.float64]:
+            image = image.astype(np.float32)
+
         ret_dict = dict(image=cv2.resize(image, resized_shape, interpolation=cv2.INTER_LINEAR))
+        
         for key, value in super_dict.items():
+            # Ensure value is compatible with cv2.resize
+            if not isinstance(value, np.ndarray):
+                value = np.asarray(value, dtype=np.float32)
+            if not value.flags['C_CONTIGUOUS']:
+                value = np.ascontiguousarray(value)
+            if value.dtype not in [np.uint8, np.float32, np.float64]:
+                value = value.astype(np.float32)
+            
             ret_dict[key] = cv2.resize(
                 value, resized_shape,
                 # project mask by the nearest interpolation algorithm

@@ -1,0 +1,45 @@
+2025-10-05 04:29:29,909 - INFO - Starting training process...
+2025-10-05 04:29:29,909 - INFO - Loading training data from: ./dummy_datasets/NEU-RSDDS-AUG
+2025-10-05 04:29:29,909 - INFO - Initializing model (SAM: vit_b).
+2025-10-05 04:29:29,909 - INFO - SAM checkpoint path: ./dummy_sam.pth
+2025-10-05 04:30:29,340 - INFO - Starting training process...
+2025-10-05 04:30:29,341 - INFO - Loading training data from: ./dummy_datasets/NEU-RSDDS-AUG
+2025-10-05 04:30:29,341 - INFO - Initializing model (SAM: vit_b).
+2025-10-05 04:30:29,341 - INFO - SAM checkpoint path: ./dummy_sam.pth
+2025-10-05 04:31:22,233 - INFO - Starting training process...
+2025-10-05 04:31:22,233 - INFO - Loading training data from: ./dummy_datasets/NEU-RSDDS-AUG
+2025-10-05 04:31:22,233 - INFO - Initializing model (SAM: vit_b).
+2025-10-05 04:31:22,233 - INFO - SAM checkpoint path: ./dummy_sam.pth
+2025-10-05 04:32:47,814 - INFO - Starting training process...
+2025-10-05 04:32:47,814 - INFO - Loading training data from: ./dummy_datasets/NEU-RSDDS-AUG
+2025-10-05 04:32:47,814 - INFO - Initializing model (SAM: vit_b).
+2025-10-05 04:32:47,814 - INFO - SAM checkpoint path: ./dummy_sam.pth
+2025-10-05 04:33:44,105 - INFO - Starting training process...
+2025-10-05 04:33:44,105 - INFO - Loading training data from: ./dummy_datasets/NEU-RSDDS-AUG
+2025-10-05 04:33:44,105 - INFO - Initializing model (SAM: vit_b).
+2025-10-05 04:33:44,105 - INFO - SAM checkpoint path: ./dummy_sam.pth
+2025-10-05 04:36:23,332 - INFO - Starting training process...
+2025-10-05 04:36:23,332 - INFO - Loading training data from: ./dummy_datasets/NEU-RSDDS-AUG
+2025-10-05 04:36:23,333 - INFO - Initializing model (SAM: vit_b).
+2025-10-05 04:36:23,333 - INFO - SAM checkpoint path: ./dummy_sam.pth
+2025-10-05 04:36:24,298 - INFO - Training for 1 epochs on cpu.
+2025-10-05 04:37:53,781 - INFO - Starting training process...
+2025-10-05 04:37:53,781 - INFO - Loading training data from: ./dummy_datasets/NEU-RSDDS-AUG
+2025-10-05 04:37:53,782 - INFO - Initializing model (SAM: vit_b).
+2025-10-05 04:37:53,782 - INFO - SAM checkpoint path: ./dummy_sam.pth
+2025-10-05 04:37:58,094 - INFO - Training for 1 epochs on cpu.
+2025-10-05 04:38:52,796 - INFO - Starting training process...
+2025-10-05 04:38:52,796 - INFO - Loading training data from: ./dummy_datasets/NEU-RSDDS-AUG
+2025-10-05 04:38:52,797 - INFO - Initializing model (SAM: vit_b).
+2025-10-05 04:38:52,797 - INFO - SAM checkpoint path: ./dummy_sam.pth
+2025-10-05 04:38:53,981 - INFO - Training for 1 epochs on cpu.
+2025-10-05 04:41:17,311 - INFO - Starting training process...
+2025-10-05 04:41:17,311 - INFO - Loading training data from: ./dummy_datasets/NEU-RSDDS-AUG
+2025-10-05 04:41:17,312 - INFO - Initializing model (SAM: vit_b).
+2025-10-05 04:41:17,312 - INFO - SAM checkpoint path: ./dummy_sam.pth
+2025-10-05 04:41:18,253 - INFO - Training for 1 epochs on cpu.
+2025-10-05 04:43:23,628 - INFO - Starting training process...
+2025-10-05 04:43:23,628 - INFO - Loading training data from: ./dummy_datasets/NEU-RSDDS-AUG
+2025-10-05 04:43:23,628 - INFO - Initializing model (SAM: vit_b).
+2025-10-05 04:43:23,629 - INFO - SAM checkpoint path: ./dummy_sam.pth
+2025-10-05 04:43:24,567 - INFO - Training for 1 epochs on cpu.

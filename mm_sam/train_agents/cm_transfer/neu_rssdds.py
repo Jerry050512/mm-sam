@@ -96,13 +96,18 @@ class NEURSSDDSCMTransferSAM(CMTransferSAM):
             Dictionary containing loss values and metrics
         """
         # Extract data from batch
-        images = batch['images']  # List of depth images
-        gt_masks = batch['gt_masks']  # List of ground truth masks
+        images = batch['images']  # Depth images (B, C, H, W) or List[Tensor]
+        gt_masks = batch['gt_masks']  # Ground truth masks (B, H, W) or List[Tensor]
         point_coords = batch.get('point_coords', None)
         box_coords = batch.get('box_coords', None)
         
-        batch_size = len(images)
-        device = images[0].device if len(images) > 0 else torch.device('cpu')
+        # Handle both stacked tensors and lists
+        if isinstance(images, torch.Tensor):
+            batch_size = images.shape[0]
+            device = images.device
+        else:
+            batch_size = len(images)
+            device = images[0].device if len(images) > 0 else torch.device('cpu')
         
         # Set images for SAM encoder using the base class method
         self.set_infer_img(data_dict=batch)
@@ -168,15 +173,23 @@ class NEURSSDDSCMTransferSAM(CMTransferSAM):
                     continue
                 
                 pred_mask = pred_masks[idx]  # Get prediction for this sample
-                sample_gt_mask = gt_masks[i]  # Ground truth mask
+                
+                # Get ground truth mask (handle both stacked and list formats)
+                if isinstance(gt_masks, torch.Tensor):
+                    sample_gt_mask = gt_masks[i]  # (1, H, W) - already has batch dimension
+                else:
+                    sample_gt_mask = gt_masks[i]  # (1, H, W) - tensor from list with batch dimension
                 
                 # Resize ground truth to match prediction if needed
-                if pred_mask.shape != sample_gt_mask.shape:
+                # sample_gt_mask is (1, H, W), pred_mask is (H, W)
+                if sample_gt_mask.shape[-2:] != pred_mask.shape:
                     sample_gt_mask = F.interpolate(
-                        sample_gt_mask.unsqueeze(0).unsqueeze(0).float(),
+                        sample_gt_mask.unsqueeze(0).float(),  # (1, 1, H, W)
                         size=pred_mask.shape,
                         mode='nearest'
-                    ).squeeze().long()
+                    ).squeeze(0).squeeze(0).long()  # Back to (H, W)
+                else:
+                    sample_gt_mask = sample_gt_mask.squeeze(0).long()  # Remove batch dim: (H, W)
                 
                 # Convert to binary (0 or 1)
                 sample_gt_mask = (sample_gt_mask > 0).long()
@@ -321,7 +334,7 @@ class NEURSSDDSCMTransferSAM(CMTransferSAM):
             iter_name: Iterator name (unused)
         """
         # Get data from batch
-        images = batch['images']  # List of depth images
+        images = batch['images']  # Depth images (B, C, H, W) or List[Tensor]
         index_names = batch['index_name']
         
         # Set images for SAM encoder
@@ -339,8 +352,14 @@ class NEURSSDDSCMTransferSAM(CMTransferSAM):
         
         for i in range(batch_size):
             # For test data, use the entire image as a bounding box prompt
-            h, w = images[i].shape[-2:]
-            box_coords = torch.tensor([0, 0, w-1, h-1], dtype=torch.float32, device=images[i].device)
+            if isinstance(images, torch.Tensor):
+                h, w = images[i].shape[-2:]
+                device = images.device
+            else:
+                h, w = images[i].shape[-2:]
+                device = images[i].device
+            
+            box_coords = torch.tensor([0, 0, w-1, h-1], dtype=torch.float32, device=device)
             batch_box_coords.append(box_coords)
             batch_output_sizes.append((h, w))
         
@@ -365,8 +384,14 @@ class NEURSSDDSCMTransferSAM(CMTransferSAM):
             print(f"Error during batch inference: {e}")
             # Create empty predictions as fallback
             for i in range(batch_size):
-                h, w = images[i].shape[-2:]
-                empty_pred = torch.zeros((h, w), device=images[i].device)
+                if isinstance(images, torch.Tensor):
+                    h, w = images[i].shape[-2:]
+                    device = images.device
+                else:
+                    h, w = images[i].shape[-2:]
+                    device = images[i].device
+                
+                empty_pred = torch.zeros((h, w), device=device)
                 predictions.append(empty_pred)
                 filenames.append(index_names[i])
                 original_sizes.append((h, w))

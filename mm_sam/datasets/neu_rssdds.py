@@ -171,7 +171,7 @@ class NEURSSDDSDataset(BaseSAMDataset):
             'rgb_images': torch.from_numpy(rgb_image).to(torch.float32).permute(2, 0, 1),
             'depth_images': torch.from_numpy(depth_image).to(torch.float32).permute(2, 0, 1),
             'depth_rgb_images': torch.from_numpy(depth_rgb_image).to(torch.float32).permute(2, 0, 1),
-            'gt_masks': torch.from_numpy(gt_mask),
+            'gt_masks': torch.from_numpy(gt_mask).unsqueeze(0),  # Add batch dimension (1, H, W)
             'point_coords': point_coords,
             'box_coords': box_coords,
             'noisy_object_masks': noisy_object_masks,
@@ -190,62 +190,68 @@ class NEURSSDDSDataset(BaseSAMDataset):
         """
         Custom collate function to properly batch NEU-RSSDDS data.
         
-        For SAM, images are typically kept as lists rather than stacked tensors
-        due to varying image sizes.
+        Since transforms resize all images to 1024x1024, we can stack them into proper batch tensors.
         
         Args:
             batch: List of sample dictionaries from __getitem__
             
         Returns:
-            Batched dictionary with proper data structures
+            Batched dictionary with proper tensor shapes (B, C, H, W) for images
         """
         # Convert list of dicts to dict of lists
         batch_dict = batch_list_to_dict(batch)
         
-        # Keep image tensors as lists (don't stack due to varying sizes)
-        # This is the standard approach for SAM datasets
-        for key in ['rgb_images', 'depth_images', 'depth_rgb_images', 'images', 'gt_masks']:
+        # Stack image tensors to create proper batch dimensions (B, C, H, W)
+        # Since transforms resize all images to 1024x1024, they should have the same size
+        for key in ['rgb_images', 'depth_images', 'depth_rgb_images', 'images']:
             if key in batch_dict:
-                # Ensure all items are tensors
-                tensor_list = []
-                for item in batch_dict[key]:
-                    if not isinstance(item, torch.Tensor):
-                        item = torch.tensor(item)
-                    tensor_list.append(item)
-                batch_dict[key] = tensor_list
+                try:
+                    # Stack tensors along batch dimension
+                    batch_dict[key] = torch.stack(batch_dict[key], dim=0)
+                except RuntimeError as e:
+                    # If stacking fails due to size mismatch, keep as list (fallback)
+                    print(f"Warning: Could not stack {key} tensors, keeping as list: {e}")
+                    batch_dict[key] = batch_dict[key]
         
-        # Handle prompt coordinates
-        if 'point_coords' in batch_dict:
-            point_coords_list = []
-            for item in batch_dict['point_coords']:
-                if item is not None:
-                    # Convert to tensor if not already
-                    if not isinstance(item, torch.Tensor):
-                        item = torch.tensor(item, dtype=torch.float32)
-                    point_coords_list.append(item)
-                else:
-                    point_coords_list.append(None)
-            batch_dict['point_coords'] = point_coords_list
+        # Ground truth masks are kept as lists since they may have different sizes
+        # (transforms use skip_mask=True, so masks retain original resolution)
+        if 'gt_masks' in batch_dict:
+            # Keep as list - this is expected for SAM training
+            pass
+        
+        # Handle prompt coordinates using base class logic
+        point_coords, point_labels = [], []
+        for item in batch_dict.get('point_coords', []):
+            if item is None:
+                point_coords.append(None)
+                point_labels.append(None)
+            else:
+                _point_coords, _point_labels = item, []
+                max_num_coords = max(len(_p_c) for _p_c in _point_coords)
+                for _p_c in _point_coords:
+                    _point_labels.append([1 for _ in _p_c])
+                    
+                    curr_num_coords = len(_p_c)
+                    if curr_num_coords < max_num_coords:
+                        _p_c.extend([[0, 0] for _ in range(max_num_coords - curr_num_coords)])
+                        _point_labels[-1].extend([-1 for _ in range(max_num_coords - curr_num_coords)])
+                
+                point_coords.append(torch.FloatTensor(_point_coords))
+                point_labels.append(torch.LongTensor(_point_labels))
+        
+        batch_dict['point_coords'] = point_coords
+        batch_dict['point_labels'] = point_labels
         
         # Handle bounding box coordinates
-        if 'box_coords' in batch_dict:
-            box_coords_list = []
-            for item in batch_dict['box_coords']:
-                if item is not None:
-                    # Convert to tensor if not already
-                    if not isinstance(item, torch.Tensor):
-                        item = torch.tensor(item, dtype=torch.float32)
-                    box_coords_list.append(item)
-                else:
-                    box_coords_list.append(None)
-            batch_dict['box_coords'] = box_coords_list
+        batch_dict['box_coords'] = [
+            torch.FloatTensor(item) if item is not None else None for item in batch_dict.get('box_coords', [])
+        ]
         
         # Handle object masks
-        if 'object_masks' in batch_dict:
-            batch_dict['object_masks'] = [
-                torch.from_numpy(item) if item is not None and not isinstance(item, torch.Tensor) else item 
-                for item in batch_dict['object_masks']
-            ]
+        batch_dict['object_masks'] = [
+            torch.from_numpy(item) if item is not None and not isinstance(item, torch.Tensor) else item 
+            for item in batch_dict.get('object_masks', [])
+        ]
         
         # Handle noisy object masks
         if 'noisy_object_masks' in batch_dict:
@@ -253,9 +259,6 @@ class NEURSSDDSDataset(BaseSAMDataset):
                 torch.from_numpy(item) if item is not None and not isinstance(item, torch.Tensor) else item 
                 for item in batch_dict['noisy_object_masks']
             ]
-        
-        # Keep object_classes and index_name as lists
-        # These don't need to be stacked
         
         return batch_dict
 

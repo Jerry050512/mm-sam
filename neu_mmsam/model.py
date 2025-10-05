@@ -203,31 +203,45 @@ class SAMbyUCMT(nn.Module):
         depth_images_norm = self.depth_encoder.preprocess(depth_images)
         image_embeddings = self.depth_encoder(depth_images_norm)
 
-        # Encode prompts
-        sparse_embeddings, dense_embeddings = self.prompt_encoder(
-            points=points,
-            boxes=boxes,
-            masks=masks,
-        )
+        # The original SAM implementation processes images one by one.
+        # We loop through the batch to maintain compatibility.
+        outputs_masks = []
+        outputs_iou_preds = []
+        for i in range(image_embeddings.shape[0]):
+            single_image_embedding = image_embeddings[i:i+1]
 
-        # Decode masks
-        low_res_masks, iou_predictions = self.mask_decoder(
-            image_embeddings=image_embeddings,
-            prompt_encoder=self.prompt_encoder,
-            sparse_embeddings=sparse_embeddings,
-            dense_embeddings=dense_embeddings,
-            multimask_output=self.multimask_output,
-        )
+            # For this MVP, we only use box prompts during training
+            single_boxes = boxes[i:i+1] if boxes is not None else None
+
+            sparse_embeddings, dense_embeddings = self.prompt_encoder(
+                points=None,
+                boxes=single_boxes,
+                masks=None,
+            )
+
+            low_res_masks, iou_predictions = self.mask_decoder(
+                image_embeddings=single_image_embedding,
+                prompt_encoder=self.prompt_encoder,
+                sparse_embeddings=sparse_embeddings,
+                dense_embeddings=dense_embeddings,
+                multimask_output=self.multimask_output,
+            )
+
+            outputs_masks.append(low_res_masks)
+            outputs_iou_preds.append(iou_predictions)
+
+        all_masks = torch.cat(outputs_masks, dim=0)
+        all_iou_preds = torch.cat(outputs_iou_preds, dim=0)
 
         # Postprocess masks to original image size
         ori_res_masks = F.interpolate(
-            low_res_masks,
+            all_masks,
             size=(depth_images.shape[-2], depth_images.shape[-1]),
             mode="bilinear",
             align_corners=False,
         )
 
-        return ori_res_masks, iou_predictions
+        return ori_res_masks, all_iou_preds
 
     def infer(self, depth_image):
         """A simplified inference method for a single image without prompts."""

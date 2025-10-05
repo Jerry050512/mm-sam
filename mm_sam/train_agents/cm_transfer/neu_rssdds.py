@@ -96,53 +96,79 @@ class NEURSSDDSCMTransferSAM(CMTransferSAM):
             Dictionary containing loss values and metrics
         """
         # Extract data from batch
-        images = batch['images']  # Depth images (B, C, H, W)
-        gt_masks = batch['gt_masks']  # Ground truth masks (B, H, W)
+        images = batch['images']  # List of depth images
+        gt_masks = batch['gt_masks']  # List of ground truth masks
         point_coords = batch.get('point_coords', None)
         box_coords = batch.get('box_coords', None)
         
-        batch_size = images.shape[0]
-        device = images.device
+        batch_size = len(images)
+        device = images[0].device if len(images) > 0 else torch.device('cpu')
         
-        # Set images for SAM encoder
-        self.sam.set_infer_img(img=images, pixel_norm=False)
+        # Set images for SAM encoder using the base class method
+        self.set_infer_img(data_dict=batch)
         
-        total_loss = 0.0
-        valid_samples = 0
+        # Prepare prompts for the entire batch
+        batch_point_coords = []
+        batch_box_coords = []
+        valid_indices = []
         
-        # Process each sample in the batch
         for i in range(batch_size):
-            # Get prompts for current sample
             sample_point_coords = point_coords[i] if point_coords is not None else None
             sample_box_coords = box_coords[i] if box_coords is not None else None
-            sample_gt_mask = gt_masks[i]  # (H, W)
             
             # Skip samples without valid prompts
             if sample_point_coords is None and sample_box_coords is None:
+                batch_point_coords.append(None)
+                batch_box_coords.append(None)
                 continue
             
-            # Prepare prompts
-            prompts = {}
+            # Process point coordinates
             if sample_point_coords is not None:
                 # Filter out placeholder points (label = -1)
-                valid_points = sample_point_coords[:, 2] != -1  # Assuming format (x, y, label)
-                if valid_points.any():
-                    prompts['point_coords'] = sample_point_coords[valid_points, :2].unsqueeze(0)  # (1, N, 2)
-                    prompts['point_labels'] = sample_point_coords[valid_points, 2].unsqueeze(0)   # (1, N)
+                if hasattr(sample_point_coords, 'shape') and len(sample_point_coords.shape) == 2:
+                    valid_points = sample_point_coords[:, 2] != -1  # Assuming format (x, y, label)
+                    if valid_points.any():
+                        batch_point_coords.append(sample_point_coords[valid_points, :2])  # (N, 2)
+                    else:
+                        batch_point_coords.append(None)
+                else:
+                    batch_point_coords.append(None)
+            else:
+                batch_point_coords.append(None)
             
+            # Process box coordinates
             if sample_box_coords is not None:
-                prompts['box_coords'] = sample_box_coords.unsqueeze(0)  # (1, 4)
+                batch_box_coords.append(sample_box_coords)
+            else:
+                batch_box_coords.append(None)
             
-            # Skip if no valid prompts
-            if not prompts:
-                continue
+            valid_indices.append(i)
+        
+        # Skip if no valid samples
+        if not valid_indices:
+            return {
+                'loss': torch.tensor(0.0, device=device, requires_grad=True),
+                'valid_samples': torch.tensor(0, device=device),
+                'batch_size': torch.tensor(batch_size, device=device)
+            }
+        
+        try:
+            # Forward pass through SAM for the entire batch
+            pred_masks, pred_ious = self.sam.infer(
+                point_coords=batch_point_coords,
+                box_coords=batch_box_coords
+            )
             
-            try:
-                # Forward pass through SAM
-                pred_masks, pred_ious = self.sam.infer(**prompts)
+            total_loss = 0.0
+            valid_samples = 0
+            
+            # Compute loss for each valid sample
+            for idx, i in enumerate(valid_indices):
+                if batch_point_coords[i] is None and batch_box_coords[i] is None:
+                    continue
                 
-                # Get the predicted mask (remove batch dimension)
-                pred_mask = pred_masks[0].squeeze()  # (H, W)
+                pred_mask = pred_masks[idx]  # Get prediction for this sample
+                sample_gt_mask = gt_masks[i]  # Ground truth mask
                 
                 # Resize ground truth to match prediction if needed
                 if pred_mask.shape != sample_gt_mask.shape:
@@ -154,7 +180,6 @@ class NEURSSDDSCMTransferSAM(CMTransferSAM):
                 
                 # Convert to binary (0 or 1)
                 sample_gt_mask = (sample_gt_mask > 0).long()
-                pred_mask_binary = (pred_mask > 0.5).long()
                 
                 # Compute binary cross-entropy loss
                 pred_mask_logits = torch.logit(pred_mask.clamp(1e-7, 1-1e-7))
@@ -165,9 +190,13 @@ class NEURSSDDSCMTransferSAM(CMTransferSAM):
                 total_loss += loss
                 valid_samples += 1
                 
-            except Exception as e:
-                print(f"Error processing sample {i}: {e}")
-                continue
+        except Exception as e:
+            print(f"Error during SAM inference: {e}")
+            return {
+                'loss': torch.tensor(0.0, device=device, requires_grad=True),
+                'valid_samples': torch.tensor(0, device=device),
+                'batch_size': torch.tensor(batch_size, device=device)
+            }
         
         # Average loss over valid samples
         if valid_samples > 0:
@@ -292,7 +321,7 @@ class NEURSSDDSCMTransferSAM(CMTransferSAM):
             iter_name: Iterator name (unused)
         """
         # Get data from batch
-        images = batch['images']  # Depth images
+        images = batch['images']  # List of depth images
         index_names = batch['index_name']
         
         # Set images for SAM encoder
@@ -304,32 +333,40 @@ class NEURSSDDSCMTransferSAM(CMTransferSAM):
         
         batch_size = len(index_names)
         
+        # Prepare bounding box prompts for all samples
+        batch_box_coords = []
+        batch_output_sizes = []
+        
         for i in range(batch_size):
-            try:
-                # For test data, we need to generate prompts since we don't have ground truth
-                # Use the entire image as a bounding box prompt
-                h, w = images[i].shape[-2:]
-                box_coords = torch.tensor([[0, 0, w-1, h-1]], dtype=torch.float32, device=images.device)
-                
-                # Generate prediction
-                pred_masks, pred_ious = self.infer(
-                    box_coords=box_coords,
-                    output_mask_size=[(h, w)]
-                )
-                
-                # Get the prediction mask
-                pred_mask = pred_masks[0].squeeze()  # Remove batch dimension
+            # For test data, use the entire image as a bounding box prompt
+            h, w = images[i].shape[-2:]
+            box_coords = torch.tensor([0, 0, w-1, h-1], dtype=torch.float32, device=images[i].device)
+            batch_box_coords.append(box_coords)
+            batch_output_sizes.append((h, w))
+        
+        try:
+            # Generate predictions for the entire batch
+            pred_masks, pred_ious = self.sam.infer(
+                box_coords=batch_box_coords,
+                output_mask_size=batch_output_sizes
+            )
+            
+            # Process each prediction
+            for i in range(batch_size):
+                pred_mask = pred_masks[i]  # Get prediction for this sample
+                h, w = batch_output_sizes[i]
                 
                 # Store prediction info
                 predictions.append(pred_mask)
                 filenames.append(index_names[i])
                 original_sizes.append((h, w))
                 
-            except Exception as e:
-                print(f"Error processing sample {index_names[i]}: {e}")
-                # Create empty prediction as fallback
+        except Exception as e:
+            print(f"Error during batch inference: {e}")
+            # Create empty predictions as fallback
+            for i in range(batch_size):
                 h, w = images[i].shape[-2:]
-                empty_pred = torch.zeros((h, w), device=images.device)
+                empty_pred = torch.zeros((h, w), device=images[i].device)
                 predictions.append(empty_pred)
                 filenames.append(index_names[i])
                 original_sizes.append((h, w))

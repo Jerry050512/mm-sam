@@ -1,6 +1,6 @@
 import json
 import os
-from typing import Dict, Union
+from typing import Dict, Union, Sequence
 
 import numpy as np
 import torch
@@ -12,6 +12,7 @@ FUSION_DATASETS = DATASETS["MMFusion"]
 
 from mm_sam.datasets.base import BaseSAMDataset
 from utilbox.data_load.read_utils import read_image_as_rgb_from_disk, read_greyscale_mask_from_disk
+from utilbox.data_load.loader_utils import batch_list_to_dict
 from utilbox.demo_vis.vis_utils import nonrgb_to_rgb
 from utilbox.global_config import DATA_ROOT
 from utilbox.transforms import init_transforms_by_config
@@ -183,6 +184,80 @@ class NEURSSDDSDataset(BaseSAMDataset):
         ret_dict['images'] = ret_dict[self.image_type]
         
         return ret_dict
+
+    @classmethod
+    def collate_fn(cls, batch: Sequence[Dict]) -> Dict:
+        """
+        Custom collate function to properly batch NEU-RSSDDS data.
+        
+        For SAM, images are typically kept as lists rather than stacked tensors
+        due to varying image sizes.
+        
+        Args:
+            batch: List of sample dictionaries from __getitem__
+            
+        Returns:
+            Batched dictionary with proper data structures
+        """
+        # Convert list of dicts to dict of lists
+        batch_dict = batch_list_to_dict(batch)
+        
+        # Keep image tensors as lists (don't stack due to varying sizes)
+        # This is the standard approach for SAM datasets
+        for key in ['rgb_images', 'depth_images', 'depth_rgb_images', 'images', 'gt_masks']:
+            if key in batch_dict:
+                # Ensure all items are tensors
+                tensor_list = []
+                for item in batch_dict[key]:
+                    if not isinstance(item, torch.Tensor):
+                        item = torch.tensor(item)
+                    tensor_list.append(item)
+                batch_dict[key] = tensor_list
+        
+        # Handle prompt coordinates
+        if 'point_coords' in batch_dict:
+            point_coords_list = []
+            for item in batch_dict['point_coords']:
+                if item is not None:
+                    # Convert to tensor if not already
+                    if not isinstance(item, torch.Tensor):
+                        item = torch.tensor(item, dtype=torch.float32)
+                    point_coords_list.append(item)
+                else:
+                    point_coords_list.append(None)
+            batch_dict['point_coords'] = point_coords_list
+        
+        # Handle bounding box coordinates
+        if 'box_coords' in batch_dict:
+            box_coords_list = []
+            for item in batch_dict['box_coords']:
+                if item is not None:
+                    # Convert to tensor if not already
+                    if not isinstance(item, torch.Tensor):
+                        item = torch.tensor(item, dtype=torch.float32)
+                    box_coords_list.append(item)
+                else:
+                    box_coords_list.append(None)
+            batch_dict['box_coords'] = box_coords_list
+        
+        # Handle object masks
+        if 'object_masks' in batch_dict:
+            batch_dict['object_masks'] = [
+                torch.from_numpy(item) if item is not None and not isinstance(item, torch.Tensor) else item 
+                for item in batch_dict['object_masks']
+            ]
+        
+        # Handle noisy object masks
+        if 'noisy_object_masks' in batch_dict:
+            batch_dict['noisy_object_masks'] = [
+                torch.from_numpy(item) if item is not None and not isinstance(item, torch.Tensor) else item 
+                for item in batch_dict['noisy_object_masks']
+            ]
+        
+        # Keep object_classes and index_name as lists
+        # These don't need to be stacked
+        
+        return batch_dict
 
 
 @TRANSFER_DATASETS.register("neu_rssdds")
